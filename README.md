@@ -6,5 +6,9 @@ As part of this repository, the following methods are implemented for performing
 
 This repository contains work from a project done for the EL2320 course (Applied Estimation) in KTH. 
 
+## Environment details
+
+* Python 3.6
+
 
  
