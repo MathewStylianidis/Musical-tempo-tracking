@@ -16,4 +16,4 @@ In this approach an XGBoost classifier is trained to detect beats from the audio
 
 ### XGBoost model
 
-We perform STFT with a window size of 0.075s and a hop size of 0.0375s, which means that we detect beats within audio block sizes corresponding to 16th notes for a maximum tempo value of 200 BPM.
+We perform STFT with a window size of 0.075s and a hop size of 0.0375s, which means that we detect beats within audio block sizes corresponding to 16th notes for a maximum tempo value of 200 BPM. We then split the frequency bands to the ranges (50,120), (120,300) and (300, 17000) and calculate the sum over those frequency bands as features. XGboost then takes as input those sum values for 32 time steps, which corresponds to 96 values in total.
