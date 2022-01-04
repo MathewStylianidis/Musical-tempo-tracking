@@ -2,11 +2,18 @@
 from abc import ABC, abstractmethod
 from typing import Tuple
 
+import math
 import numpy as np
 from scipy.fft import fft
 
 
 __author__ = "Matthaios Stylianidis"
+
+
+def proper_round(x):
+    """ Rounds x to the closest integer"""
+    return math.ceil(x) if x % 1 >= 0.5 else round(x)
+
 
 class BaseFeatExtractor(ABC):
     """ Base class for extracting features from audio
@@ -35,6 +42,8 @@ class BaseFreqFeatExtractor(BaseFeatExtractor):
         window_size_samples (int): Window size of STFT in samples.
         hop_size (float): Hope size of STFT in seconds.
         hope_size_samples (int): Hop size of STFT in samples.
+        fft_size_samples (int): FFT result size in samples.
+        fft_resolution (float): Frequency resolution of FFT.
     """
     def __init__(self, audio_array: np.ndarray, sr: int, window_size: float, hop_size: float):
         super().__init__(audio_array)
@@ -43,29 +52,34 @@ class BaseFreqFeatExtractor(BaseFeatExtractor):
         self.window_size_samples = int(self.sr * window_size)
         self.hop_size = hop_size
         self.hop_size_samples = int(self.sr * hop_size)
+        self.fft_size_samples = self.window_size_samples // 2
+        self.fft_resolution = self.sr / self.fft_size_samples
 
     @abstractmethod
     def extract_features(self):
         """ Abstract method for generating features from the given audio."""
         pass
 
-    def extract_stft_features(self, stft_function):
-        """ Generator method for calling stft on a signal and applying a function on the result to calculate features.
+    @abstractmethod
+    def stft_function(self, frequencies: np.ndarray) -> np.ndarray:
+        """ Abstract method that is applied to each set of frequencies extracted with STFT. """
+        pass
 
-        Args:
-            stft_function (function): A function to apply to each window extracted with STFT.
+    def extract_stft_features(self):
+        """ Generator method for calling stft on a signal and applying a function on the result to calculate features.
 
         Returns:
             The features calculated using stft_function on each frame.
         """
         half_window_size = int(self.window_size_samples / 2)
-        window_function = np.hamming(self.window_size_samples)
-        index = + half_window_size + 1
-        for i in range(index, len(self.audio_array) - half_window_size, self.hop_size_samples):
-            frame = self.audio_array[index:index + self.hop_size_samples]
+        window_function = np.hanning(self.window_size_samples)
+        start_index = half_window_size + 1
+        for i in range(start_index, len(self.audio_array) - half_window_size, self.hop_size_samples):
+            # Extract frame centered on index
+            frame = self.audio_array[i - half_window_size:i + half_window_size + 1]
             frame *= window_function
-            frequencies = fft(frame)[0:self.window_size_samples//2]
-            features = stft_function(frequencies)
+            frequencies = np.abs(fft(frame)[0:self.window_size_samples//2] * 2 / self.window_size_samples)
+            features = self.stft_function(frequencies)
             yield features
 
 
@@ -79,6 +93,9 @@ class DrumFreqFeatExtractor(BaseFreqFeatExtractor):
         window_size_samples (int): Window size of STFT in samples.
         hop_size (float): Hope size of STFT in seconds.
         hope_size_samples (int): Hop size of STFT in samples.
+        low_freq_range_samples (int): Range of low frequencies in FFT results.
+        med_freq_range_samples (int): Range of medium frequencies in FFT results.
+        high_freq_range_samples (int): Range of high frequencies in FFT results.
         LOW_FREQ_RANGE (Tuple[int]): A tuple with the range of frequency values for low frequency drum parts such as
             a kick or a floor drum.
         MED_FREQ_RANGE (Tuple[int]): A tuple with the range of frequency values for medium frequency drum parts such as
@@ -86,12 +103,18 @@ class DrumFreqFeatExtractor(BaseFreqFeatExtractor):
         HIGH_FREQ_RANGE (Tuple[int]): A tuple with the range of frequency values for low frequency drum parts such as
             certain toms or cymbals.
     """
-    LOW_FREQ_RANGE = (50, 120)
+    LOW_FREQ_RANGE = (0, 120)
     MED_FREQ_RANGE = (120, 300)
-    HIGH_FREQ_RANGE = (300, 17000)
+    HIGH_FREQ_RANGE = (300, 22050)
 
     def __init__(self, audio_array: np.ndarray, sr: int, window_size: float, hop_size: float):
         super().__init__(audio_array, sr, window_size, hop_size)
+        self.low_freq_range_samples = (0,
+                                       proper_round(self.LOW_FREQ_RANGE[1] / self.fft_resolution))
+        self.med_freq_range_samples = (proper_round(self.MED_FREQ_RANGE[0] / self.fft_resolution),
+                                       proper_round(self.MED_FREQ_RANGE[1] / self.fft_resolution))
+        self.high_freq_range_samples = (proper_round(self.HIGH_FREQ_RANGE[0] / self.fft_resolution),
+                                        self.fft_size_samples)
 
     def extract_features(self):
         """ Method generating features from the given audio.
@@ -100,12 +123,12 @@ class DrumFreqFeatExtractor(BaseFreqFeatExtractor):
             A np.ndarray with the frequency sum features calculated from the STFT frequencies.
         """
         X = []
-        for features in self.extract_stft_features(self.extract_frequency_band_sums):
+        for features in self.extract_stft_features():
             X.append(features)
         X = np.stack(X)
         return X
 
-    def extract_frequency_band_sums(self, frequencies: np.ndarray):
+    def stft_function(self, frequencies: np.ndarray) -> np.ndarray:
         """ Groups frequencies extracted with FFT into bands and calculates the sum over those bands.
 
         Args:
@@ -114,7 +137,7 @@ class DrumFreqFeatExtractor(BaseFreqFeatExtractor):
         Returns:
             A numpy array with three elements consisting of the sum over the low, medium, and high frequency bands.
         """
-        low_freq = frequencies
-        med_freq = frequencies
-        high_freq = frequencies
-        return np.array(low_freq.sum(), med_freq.sum(), high_freq.sum())
+        low_freq = frequencies[self.low_freq_range_samples[0]:self.low_freq_range_samples[1]]
+        med_freq = frequencies[self.med_freq_range_samples[0]:self.med_freq_range_samples[1]]
+        high_freq = frequencies[self.high_freq_range_samples[0]:self.high_freq_range_samples[1]]
+        return np.array([low_freq.sum(), med_freq.sum(), high_freq.sum()])
