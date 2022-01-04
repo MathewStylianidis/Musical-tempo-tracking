@@ -10,5 +10,8 @@ This repository contains work from a project done for the EL2320 course (Applied
 
 * Python 3.6
 
+## Datasets
+
+* [Groove MIDI dataset](https://magenta.tensorflow.org/datasets/groove#midi-data)
 
  
