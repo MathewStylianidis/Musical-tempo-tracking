@@ -1,4 +1,4 @@
-# Tempo tracking using particle filters
+# Tempo tracking using probabilistic estimation/ML/signal processing methods
 
 As part of this repository, the following methods are implemented for performing tempo tracking (tracking of BPM) in songs:
 
