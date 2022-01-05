@@ -22,9 +22,9 @@ We perform STFT with a window size of 0.1s and a hop size of 0.0375s, which mean
 
 ## Switching Kalman state tempo tracker on MIDI onset times
 
-(Implemented)
-
 We extract the note onsets from the available MIDI files and perform tempo tracking using the method proposed in [this paper](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.217.32&rep=rep1&type=pdf), using a particle filter to estimate the switching state variable.
+
+We also evaluate the method without a particle filter estimation of the switching state variable, but by using the optimal switching state value according to the difference between the predicted and observed onset as well as the previously estimated period.
 
 ### Datasets
 
