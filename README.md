@@ -6,7 +6,7 @@ This repository contains work from a project done for the EL2320 course (Applied
 
 * Python 3.9
 
-## XGBoost beat detector + Particle filter tempo tracker
+## XGBoost beat detector + Particle filter tempo tracker (Implementation halted)
 
 In this approach an XGBoost classifier is trained to detect beats from the audio using spectral features and a particle filter uses the XGBoost output as observations and tracks the beat location and the tempo period in a song.
 
@@ -16,7 +16,6 @@ In this approach an XGBoost classifier is trained to detect beats from the audio
 
 #### XGBoost beat detection model 
 
-(Not implemented)
 
 We perform STFT with a window size of 0.1s and a hop size of 0.0375s, which means that we detect beats within audio blocks slightly larger than than 16th note sized blocks, with a resolution corresponding to 32th notes, for a maximum tempo value of 200 BPM. A hann window is used with STFT. We then split the frequency bands to the ranges (50,120), (120,300) and (300, 22050) and calculate the sum over those frequency bands as features. XGboost then takes as input those sum values for 32 time steps, which corresponds to 96 values in total. The prediction of XGBoost infers whether there is a beat or not at the center of the last STFT frame.
 
