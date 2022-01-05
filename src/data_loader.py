@@ -45,21 +45,25 @@ class GmdDataLoader(DataLoader):
     MIDI_TYPE = "midi"
     VALID_FILE_TYPES = [WAV_TYPE, MIDI_TYPE]
     TRAIN_SPLIT = "train"
+    VALIDATION_SPLIT = "validation"
     TEST_SPLIT = "test"
-    VALID_SPLIT_TYPES = [TRAIN_SPLIT, TEST_SPLIT]
+    VALID_SPLIT_TYPES = [TRAIN_SPLIT, VALIDATION_SPLIT, TEST_SPLIT]
 
     def __init__(self, dataset_root_path: str):
         super().__init__(dataset_root_path)
         self.sr = None
 
-    def get_data(self, split: str, min_duration: float = 30.0) -> (np.ndarray, pd.Series, float):
+    def get_data(self, split: str, min_duration: float = 30.0, get_midi_onsets: bool = False)\
+            -> (np.ndarray, pd.Series, float):
         """ Generator function returning a tuple with wav file numpy content, a pandas series with the meta-data and
         a float corresponding to the onset time of the first note in the MIDI file.
 
         Args:
-            split: The data split to return (e.g. train for training data or test for test data)
+            split (str): The data split to return (e.g. train for training data or test for test data)
             min_duration (float): The minimum duration for the recordings returned. All recordings with a length lower
                 than that are discarded.
+            get_midi_onsets (bool) If set to True, then the MIDI onset times are returned instead of the wav file
+                content.
 
         Returns:
             A tuple(np.ndarray, pd.Series, float).
@@ -78,11 +82,15 @@ class GmdDataLoader(DataLoader):
             meta_data_row = meta_data_df.iloc[i, :]
             if meta_data_row["duration"] < min_duration:
                 continue
-            wav_file_path = os.path.join(self.dataset_root_path, meta_data_row["audio_filename"])
-            wav_array, self.sr = librosa.load(wav_file_path)
             midi_file_path = os.path.join(self.dataset_root_path, meta_data_row["midi_filename"])
-            start_time = pretty_midi.PrettyMIDI(midi_file_path, initial_tempo=meta_data_row["bpm"]).get_onsets()[0]
-            yield wav_array, meta_data_row, start_time
+            onsets = pretty_midi.PrettyMIDI(midi_file_path, initial_tempo=meta_data_row["bpm"]).get_onsets()
+            start_time = onsets[0]
+            if not get_midi_onsets:
+                wav_file_path = os.path.join(self.dataset_root_path, meta_data_row["audio_filename"])
+                wav_array, self.sr = librosa.load(wav_file_path)
+                yield wav_array, meta_data_row, start_time
+            else:
+                yield onsets, meta_data_row, start_time
 
     def get_dataset_size(self, split: str = None, min_duration: float = 0.0):
         """ Gets the size of the dataset given the specified filtering arguments.
