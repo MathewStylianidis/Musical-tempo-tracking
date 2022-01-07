@@ -40,7 +40,7 @@ class SwitchingKalmanFilterTracker:
                  tempo_process_noise_std: float = 0.01,
                  measurement_noise_std: float = 0.1,
                  use_ideal_switch_value: bool = False,
-                 particle_no: int = 100):
+                 particle_no: int = 10):
         """
         Args:
              start_time (float): Starting time of the track
@@ -54,9 +54,10 @@ class SwitchingKalmanFilterTracker:
         """
         self.timestamps = []
         self.estimated_states = []
+        self.estimated_covs = []
         self.score_positions = []
         self.score_differences = []
-        self.A = np.array([[1, self.switch_variable], [0, 1]], dtype=np.float64)
+        self.A = np.array([[1, 1], [0, 1]], dtype=np.float64)
         self.C = np.array([1, 0], dtype=np.float64).reshape((1, 2))
         self.state = np.array([0.0, init_tempo_period], dtype=np.float64).reshape((-1, 1))
         self.P = np.diag([init_state_covariance_std**2, init_state_covariance_std**2]).astype(dtype=np.float64)
@@ -65,7 +66,7 @@ class SwitchingKalmanFilterTracker:
         self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.Q)
         self.use_ideal_switch_value = use_ideal_switch_value
         self.switch_variable_val_count = self.SWITCH_VARIABLE_MAX / self.SWITCH_VARIABLE_RESOLUTION
-        self.switch_variable_values = np.array([i * self.SWITCH_VARIABLE_RESOLUTION
+        self.switch_variable_values = np.array([(i + 1) * self.SWITCH_VARIABLE_RESOLUTION
                                                 for i in range(int(self.switch_variable_val_count))], dtype=np.float64)
         # Initialize particle set
         if not self.use_ideal_switch_value:
@@ -75,8 +76,9 @@ class SwitchingKalmanFilterTracker:
             # Create as many replicas of the Kalman Filter variables as the number of particles
             self.state = np.tile(self.state, (self.particle_no, 1, 1))
             self.A = np.tile(self.A, (self.particle_no, 1, 1))
+            self.A[:, 1, 1] = self.particles
             self.P = np.tile(self.P, (self.particle_no, 1, 1))
-            self.K = np.tile(self.K.T, (self.particle_no, 1))
+            self.K = np.tile(self.K.T, (self.particle_no, 1))[..., np.newaxis]
 
     def init_particles(self, particle_no):
         """ Initializes particle distribution """
@@ -90,7 +92,7 @@ class SwitchingKalmanFilterTracker:
         else:
             for i in range(self.particle_no):
                 self.state[i] = self.A[i] @ self.state[i]
-                self.P[i] = self.A[i] @ self.P @ self.A[i].T + self.R
+                self.P[i] = self.A[i] @ self.P[i] @ self.A[i].T + self.R
 
     def update(self, onset_time):
         """ Estimates state and state uncertainty given a new onset time observation. """
@@ -98,16 +100,22 @@ class SwitchingKalmanFilterTracker:
             self.state = self.state + self.K @ (onset_time - self.C @ self.state)
             self.P = self.P - self.K @ self.C @ self.P
             self.estimated_states.append(self.state)
+            self.estimated_covs.append(self.P)
         else:
             for i in range(self.particle_no):
-                self.state[i] = self.state + self.K[i] @ (onset_time - self.C @ self.state[i])
-                self.P[i] = self.P[i] - self.K[i] @ self.C @ self.P
+                self.state[i] = self.state[i] + self.K[i] @ (onset_time - self.C @ self.state[i])
+                self.P[i] = self.P[i] - self.K[i] @ self.C @ self.P[i]
             # Assign particle with maximum probability to estimated states
             max_prob_particle = np.argmax(self.particle_weights)
             self.estimated_states.append(self.state[max_prob_particle])
+            self.estimated_covs.append(self.P[max_prob_particle])
 
     def compute_kalman_gain(self):
-        self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.Q)
+        if self.use_ideal_switch_value:
+            self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.Q)
+        else:
+            for i in range(self.particle_no):
+                self.K[i] = self.P[i] @ self.C.T @ np.linalg.inv(self.C @ self.P[i] @ self.C.T + self.Q)
 
     def run(self, onset_time):
         if len(self.estimated_states) == 0:
@@ -143,77 +151,43 @@ class SwitchingKalmanFilterTracker:
         able.
         """
         if self.use_ideal_switch_value:
-            last_estimated_onset, last_estimated_tempo = self.state
-            ideal_score = (onset_time - last_estimated_onset) / last_estimated_tempo
+            last_est_onset, last_est_tempo = self.estimated_states[-1]
+            ideal_score = (onset_time - last_est_onset) / last_est_tempo
             rounded_ideal_score = self.switch_variable_values[np.abs(ideal_score - self.switch_variable_values).argmin()]
             self.A[0, 1] = rounded_ideal_score
         else:
+            covE = (self.C @ self.estimated_covs[-1] @ self.C.T + self.R)[0, 0]
+
             for i in range(self.particle_no):
-                last_estimated_onset, last_estimated_tempo = self.state[i]
-                ideal_score = (onset_time - last_estimated_onset) / last_estimated_tempo
-                rounded_ideal_score = self.switch_variable_values[np.abs(ideal_score - self.switch_variable_values).argmin()]
-                self.A[i, 0, 1] = rounded_ideal_score
-                
+                residual = onset_time - self.C @ self.state[i]
+                self.particle_weights[i] = (1 / np.sqrt(covE * 2 * np.pi)) * np.exp(-0.5 * residual ** 2 * covE ** -1)
 
-
-
-
-        # Search in local neighborhood of switch variable for
-
-        # Rao blackwellized particle filter
-        # Estimate switch variable gamma_k integrating over the possible tempos z_k
-        # For each possible tempo, sample switch variable gamma_K
-
-
-        # The swithc variable in a time step can have S distinct states and we wish to generate N samples.
-
-        # The switch variable here can be naively estimated by running the Kalman Filter S times on the observation
-        # sequence to calculate the proposal of gamma_k in the current step given all the previous proposals and onsets
-        # integrating out the  tempi
-
-        # Cemgil for each trajectory the integration of the tempo is computed stepwise by the Kalman Filter
-        # However to find the MAP estimate of equation 11 we need to evaluate the probability of the onsets
-        # given the series of score differences until now, independently for all exponentially many trajectories.
-        # Consequently the MAP estimation for this function can only be solved approximately
-
-        # This is a combinatorial optimization problem: we seek the maximum of a function p(γ1:K|y0:K)
-        # that associates a number with each of the discrete configurations γ1:K.
-
-        # The first important observation is that, conditioned on γ1:K, the model becomes a linear
-        # state space model and the integration on z0:K can be computed analytically using Kalman
-        # filtering equations
-
-        # According to Cemgil, it seems like that particles are initialized to (tempo, score_diff) space, and
-        # the different tempos are integrated out by greedily expanding from N to N x S states and then keeping
-        # only N states
-        #
-        #
-        pass
-        # Rao-Blackwellized (integrating tempos out) particle filter for Switching State space Model
-
-        pass
-
-    def greedy_expansion(self):
-        """ Expansion of the particle set according to Greedy Filtering as described in
-        https://www.aaai.org/Papers/JAIR/Vol18/JAIR-1802.pdf
-
-        In each timestep, this function is called  to expand the set of N particles to obtain N x S new particles,
-        where S is the number of possible score differences.
-        """
-        pass
+            # Normalize weights and perform systematic resampling
+            self.particle_weights /= self.particle_weights.sum()
+            self.systematic_resampling()
 
     def systematic_resampling(self):
         """ Systematic resampling for particles """
         # Calculate CDF of weights
         new_particle_set = np.zeros_like(self.particles)
+        new_states = np.zeros_like(self.state)
+        new_A = np.zeros_like(self.A)
+        new_P = np.zeros_like(self.P)
+
         CDF = np.cumsum(self.particle_weights)
         r_0 = np.random.random()
         for m in range(self.particle_no):
             r = min(r_0 + (m - 1) / self.particle_no, 1.0)
-            i = np.searchsorted(CDF, r)
+            i = min(np.searchsorted(CDF, r), self.particle_no - 1)
             new_particle_set[m] = self.particles[i]
+            new_states[m] = self.state[i]
+            new_A[m] = self.A[i]
+            new_P[m] = self.P[i]
+
         self.particles = new_particle_set
-        self.particle_weights = 1 / self.particle_no
+        self.A = new_A
+        self.P = new_P
+        self.state = new_states
 
     @staticmethod
     def tempo_period_to_bpm(period):

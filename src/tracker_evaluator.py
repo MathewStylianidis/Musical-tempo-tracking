@@ -15,7 +15,6 @@ class TrackerEvaluator:
             # Get last tempo estimate in BPM
             last_tempo_estimate = tempo_tracker.get_tempo_estimates()[-1]
             last_tempo_estimate_bpm = tempo_tracker.tempo_period_to_bpm(last_tempo_estimate)
-
             # Round tempo estimate to closest integer
             rounded_tempo = math.ceil(last_tempo_estimate_bpm) \
                 if last_tempo_estimate_bpm % 1 >= 0.5 else int(last_tempo_estimate_bpm)
