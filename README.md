@@ -23,7 +23,9 @@ We perform STFT with a window size of 0.1s and a hop size of 0.0375s, which mean
 
 We extract the note onsets from the available MIDI files and perform tempo tracking using the method proposed in [this paper](https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.217.32&rep=rep1&type=pdf), using a particle filter to estimate the switching state variable.
 
-We also evaluate the method without a particle filter estimation of the switching state variable, but by using the optimal switching state value according to the difference between the predicted and observed onset as well as the previously estimated period.
+We also evaluate the method without a particle filter estimation of the switching state variable, but by using the optimal switching state value that minimizes the residual error between the observed and predicted onset at each timestep. 
+
+**Current state**: The particle filter method does not work properly or is simply not performing well on the dataset we evaluated it on. Using the single switch variable value minimizing the observed/predicted onset residual gives an Accuracy2 performance value of 83.6% on the GMD dataset described below.
 
 ### Datasets
 
