@@ -42,9 +42,9 @@ class SwitchingKalmanFilterTracker:
                  onset_process_noise_std: float = 0.001,
                  tempo_process_noise_std: float = 0.001,
                  measurement_noise_std: float = 0.01,
-                 particle_no: int = 10,
+                 particle_no: int = 25,
                  expand_factor: int = 5,
-                 use_ideal_switch_value: bool = False):
+                 use_ideal_switch_value: bool = True):
         """
         Args:
              start_time (float): Starting time of the track
@@ -54,6 +54,7 @@ class SwitchingKalmanFilterTracker:
              measurement_noise_std (float): Measurement model standard deviation.
              particle_no (int): Number of particles for estimating the switching variable.
         """
+        np.random.seed(0)
         self.estimated_states = []
         self.estimated_covs = []
         self.score_differences = []
@@ -79,9 +80,11 @@ class SwitchingKalmanFilterTracker:
         if not self.use_ideal_switch_value:
             self.particle_no = particle_no
             self.particles = self.init_particles(self.particle_no)
-            self.particle_weights = np.full((self.particle_no, 1), 1/self.particle_no)
+            self.particle_weights = np.full((self.particle_no, 1), 1 / self.particle_no)
             # Create as many replicas of the Kalman Filter variables as the number of particles
             self.state = np.tile(self.state, (self.particle_no, 1))[..., np.newaxis]
+            # Randomly initialize tempo from a uniform distribution with range [50, 100] -> period: [0.5
+            self.state[:, 1, :] = np.random.uniform(0.6, 1.2, self.state[:, 1, :].shape)
             self.A = np.tile(self.A, (self.particle_no, 1, 1))
             self.A[:, 1, 1] = self.particles
             self.P = np.tile(self.P, (self.particle_no, 1, 1))
@@ -106,7 +109,7 @@ class SwitchingKalmanFilterTracker:
                 score_diff_index = np.argwhere(self.switch_variable_values == rounded_score_difference)[0, 0]
                 score_indices = [score_diff_index - self.expand_factor // 2 + i for i in range(self.expand_factor)]
                 # If index went out of the grid's indices, replace it with the ideal score index
-                score_indices = map(lambda x: min(0, max(self.switch_variable_val_count, x)), score_indices)
+                score_indices = map(lambda x: max(0, min(self.switch_variable_val_count - 1, x)), score_indices)
 
                 # For each score index computed, expand state
                 for j, score_index in enumerate(score_indices):
@@ -120,14 +123,21 @@ class SwitchingKalmanFilterTracker:
         # Calculate likelihoods
         likelihoods = np.zeros(self.expanded_state.shape[0])
         for i, expanded_state in enumerate(self.expanded_state):
+            # If tempo period is outside of a reasonable range, reject state as outlier -> 0 likelihood
+            # Range: [0.2, 2] -> 30 BPM to 240 BPM range
+            if expanded_state[1] < 0.25 or expanded_state[1] > 2:
+                likelihoods[i] = 0
+                continue
             residual = onset_time - self.C @ expanded_state
-            covE = (self.C @ self.expanded_P[i] @ self.C.T + self.R)[0, 0]
-            likelihoods[i] = (1 / np.sqrt(covE * 2 * np.pi)) * np.exp(-0.5 * residual ** 2 * covE ** -1)
-        # Get the particles with the maximum likelihood
+            #covE = (self.C @ self.expanded_P[i] @ self.C.T + self.R)[0, 0]
+            likelihoods[i] = (1 / np.sqrt(self.Q * 2 * np.pi)) * np.exp(-0.5 * residual ** 2 * self.Q ** -1)
+
+        # Get the particles with the highest likelihoods
         max_likelihood_arg = np.argpartition(likelihoods, -self.particle_no)[-self.particle_no:]
         for i in range(self.particle_no):
             self.state[i] = self.expanded_state[max_likelihood_arg[i]]
             self.P[i] = self.expanded_P[max_likelihood_arg[i]]
+            self.particle_weights[i] = likelihoods[max_likelihood_arg[i]]
 
     def update(self, onset_time):
         """ Estimates state and state uncertainty given a new onset time observation. """
@@ -160,11 +170,9 @@ class SwitchingKalmanFilterTracker:
             self.update_switch_variable(onset_time)
             # Predict
             self.predict()
-
             # Prune expanded states according to likelihood if PF is used
             if not self.use_ideal_switch_value:
                 self.prune_states(onset_time)
-
             # Update Kalman Gain
             self.compute_kalman_gain()
             # Update
