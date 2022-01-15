@@ -1,6 +1,6 @@
 # Tempo tracking using probabilistic estimation/ML/signal processing methods
 
-This repository contains work from a project done for the EL2320 course (Applied Estimation) in KTH. 
+This repository contains work from a project done for the EL2320 course (Applied Estimation) in KTH. The report for the project is under the *report* directory.
 
 ## Environment details
 
