@@ -6,9 +6,9 @@ class TrackerEvaluator:
     def __init__(self):
         pass
 
-    def evaluate(self, tracker_class, X_train, y_train, **kwargs):
+    def evaluate(self, tracker_class, X, y, **kwargs):
         preds = []
-        for i, x in enumerate(X_train):
+        for i, x in enumerate(X):
             tempo_tracker = tracker_class(**kwargs)
             for onset in x:
                 tempo_tracker.run(onset)
@@ -21,19 +21,19 @@ class TrackerEvaluator:
 
             preds.append(rounded_tempo)
 
-        accuracy2 = self.get_accuracy2(preds, y_train)
+        accuracy2 = self.get_accuracy2(preds, y)
 
         return accuracy2
 
-    def get_accuracy2(self, preds, y_train, tolerance_percentage=4.0):
+    def get_accuracy2(self, preds, y, tolerance_percentage=4.0):
         accurate_preds = 0
         for i, pred in enumerate(preds):
-            valid_tempos = [pred, pred * 2, pred * 3]
-            ground_truth = y_train[i]
+            valid_tempos = [pred/3, pred/2, pred, pred * 2, pred * 3]
+            ground_truth = y[i]
             lower_bound = ground_truth - ground_truth * tolerance_percentage / 100.0
             upper_bound = ground_truth + ground_truth * tolerance_percentage / 100.0
             for valid_tempo in valid_tempos:
                 if lower_bound < valid_tempo < upper_bound:
                     accurate_preds += 1
                     break
-        return accurate_preds / len(y_train)
+        return accurate_preds / len(y)
