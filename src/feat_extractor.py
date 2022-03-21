@@ -40,8 +40,8 @@ class BaseFreqFeatExtractor(BaseFeatExtractor):
         sr (int): Sampling rate of audio_array.
         window_size (float): Window size of STFT in seconds.
         window_size_samples (int): Window size of STFT in samples.
-        hop_size (float): Hope size of STFT in seconds.
-        hope_size_samples (int): Hop size of STFT in samples.
+        hop_size (float): Hop size of STFT in seconds.
+        hop_size_samples (int): Hop size of STFT in samples.
         fft_size_samples (int): FFT result size in samples.
         fft_resolution (float): Frequency resolution of FFT.
     """
@@ -91,8 +91,8 @@ class DrumFreqFeatExtractor(BaseFreqFeatExtractor):
         sr (int): Sampling rate of audio_array.
         window_size (float): Window size of STFT in seconds.
         window_size_samples (int): Window size of STFT in samples.
-        hop_size (float): Hope size of STFT in seconds.
-        hope_size_samples (int): Hop size of STFT in samples.
+        hop_size (float): Hop size of STFT in seconds.
+        hop_size_samples (int): Hop size of STFT in samples.
         low_freq_range_samples (int): Range of low frequencies in FFT results.
         med_freq_range_samples (int): Range of medium frequencies in FFT results.
         high_freq_range_samples (int): Range of high frequencies in FFT results.
